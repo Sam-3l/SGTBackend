@@ -16,9 +16,9 @@ export enum IQuizType{
 
 
 export interface IQuestion{
-    content: string;
+    content: string | IScenario;
     isCorrect: boolean;
-    explanation?: string;
+    explanation?: string | IScenario;
     image?: string;
 }
 

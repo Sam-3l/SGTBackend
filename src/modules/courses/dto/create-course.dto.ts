@@ -2,6 +2,7 @@ import { ArrayMinSize, IsArray, IsBoolean, IsDate, IsEnum, IsInt, IsJSON, IsNotE
 import { ICoursesInterest } from "src/modules/users/interfaces/users.interface";
 import { ICoursesLevel, IDiet, IQuestionType, IQuizType, IScenario } from "../interfaces/courses.interface";
 import { Type } from "class-transformer";
+import { IsRichContent } from "src/common/decorators/rich-content.decorator";
 
 export class CreateCourseDto {
 
@@ -232,9 +233,9 @@ export class GetQuestionDto{
 } 
 
 export class CreateQuestionDto {
-    @IsString()
+    @IsRichContent()
     @IsNotEmpty()
-    questionContent: string;
+    questionContent: string | IScenario;
 
     @IsString()
     @IsOptional()
@@ -272,9 +273,9 @@ export class CreateQuestionDto {
     @IsOptional()
     courseType?: ICoursesInterest;
 
-    @IsString()
+    @IsRichContent()
     @IsOptional()
-    explanatoryNote?: string;
+    explanatoryNote?: string | IScenario;
 
     @IsOptional()
     scenarios?: IScenario;
@@ -293,9 +294,9 @@ export class CreateQuestionDto {
 }
 
 export class UpdateQuestionDto {
-    @IsString()
+    @IsRichContent()
     @IsOptional()
-    questionContent: string;
+    questionContent: string | IScenario;
 
     @IsString()
     @IsOptional()
@@ -324,9 +325,9 @@ export class UpdateQuestionDto {
     @IsOptional()
     courseType?: ICoursesInterest;
 
-    @IsString()
+    @IsRichContent()
     @IsOptional()
-    explanatoryNote?: string;
+    explanatoryNote?: string | IScenario;
 
     @IsOptional()
     scenarios?: IScenario;
@@ -351,15 +352,15 @@ export class UpdateQuestionDto {
 
 class AnswerOptionDTO{
 
-    @IsString()
-    content: string;
+    @IsRichContent()
+    content: string | IScenario;
 
     @IsBoolean()
     isCorrect: boolean;
 
-    @IsString()
+    @IsRichContent()
     @IsOptional()
-    explanation?: string;
+    explanation?: string | IScenario;
 
     @IsString()
     @IsOptional()

@@ -37,8 +37,8 @@ export class QuestionModel extends Model<QuestionModel>{
     quiz: QuizModel;
 
     @AllowNull(false)
-    @Column
-    questionContent: string;
+    @Column(DataType.JSONB)
+    questionContent: string | IScenario;
 
     @AllowNull(true)
     @Column
@@ -69,8 +69,8 @@ export class QuestionModel extends Model<QuestionModel>{
     courseType: ICoursesInterest;
 
     @AllowNull(true)
-    @Column(DataType.TEXT)
-    explanatoryNote: string;
+    @Column(DataType.JSONB)
+    explanatoryNote: string | IScenario;
 
     @AllowNull(true)
     @Column(DataType.JSONB)
