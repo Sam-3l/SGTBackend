@@ -1,6 +1,6 @@
 import { ArrayMinSize, IsArray, IsBoolean, IsDate, IsEnum, IsInt, IsJSON, IsNotEmpty, IsNumber, IsOptional, IsString, IsUUID, Max, Min, ValidateIf, ValidateNested } from "class-validator";
 import { ICoursesInterest } from "src/modules/users/interfaces/users.interface";
-import { ICoursesLevel, IDiet, IQuestionType, IQuizType, IScenario } from "../interfaces/courses.interface";
+import { ICoursesLevel, IDiet, IQuestionType, IQuizType, IScenario, IRichContent } from "../interfaces/courses.interface";
 import { Type } from "class-transformer";
 import { IsRichContent } from "src/common/decorators/rich-content.decorator";
 
@@ -235,7 +235,7 @@ export class GetQuestionDto{
 export class CreateQuestionDto {
     @IsRichContent()
     @IsNotEmpty()
-    questionContent: string | IScenario;
+    questionContent: string | IRichContent;
 
     @IsString()
     @IsOptional()
@@ -275,7 +275,7 @@ export class CreateQuestionDto {
 
     @IsRichContent()
     @IsOptional()
-    explanatoryNote?: string | IScenario;
+    explanatoryNote?: string | IRichContent;
 
     @IsOptional()
     scenarios?: IScenario;
@@ -296,7 +296,7 @@ export class CreateQuestionDto {
 export class UpdateQuestionDto {
     @IsRichContent()
     @IsOptional()
-    questionContent: string | IScenario;
+    questionContent: string | IRichContent;
 
     @IsString()
     @IsOptional()
@@ -327,7 +327,7 @@ export class UpdateQuestionDto {
 
     @IsRichContent()
     @IsOptional()
-    explanatoryNote?: string | IScenario;
+    explanatoryNote?: string | IRichContent;
 
     @IsOptional()
     scenarios?: IScenario;
@@ -353,14 +353,14 @@ export class UpdateQuestionDto {
 class AnswerOptionDTO{
 
     @IsRichContent()
-    content: string | IScenario;
+    content: string | IRichContent;
 
     @IsBoolean()
     isCorrect: boolean;
 
     @IsRichContent()
     @IsOptional()
-    explanation?: string | IScenario;
+    explanation?: string | IRichContent;
 
     @IsString()
     @IsOptional()

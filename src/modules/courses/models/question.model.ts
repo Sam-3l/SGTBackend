@@ -1,7 +1,7 @@
 import { AfterDestroy, AllowNull, BeforeCreate, BeforeDefine, BelongsTo, Column, DataType, Default, ForeignKey, Model, PrimaryKey, Table } from "sequelize-typescript";
 import { QuizModel } from "./quiz.model";
 import { UsersModel } from "src/modules/users/models/users.model.";
-import { IDiet, IQuestion, IScenario, IUserAnswers } from "../interfaces/courses.interface";
+import { IDiet, IQuestion, IScenario, IRichContent, IUserAnswers } from "../interfaces/courses.interface";
 import { ICoursesInterest } from "src/modules/users/interfaces/users.interface";
 import { All } from "@nestjs/common";
 import { Op } from "sequelize";
@@ -38,7 +38,7 @@ export class QuestionModel extends Model<QuestionModel>{
 
     @AllowNull(false)
     @Column(DataType.JSONB)
-    questionContent: string | IScenario;
+    questionContent: string | IRichContent;
 
     @AllowNull(true)
     @Column
@@ -70,7 +70,7 @@ export class QuestionModel extends Model<QuestionModel>{
 
     @AllowNull(true)
     @Column(DataType.JSONB)
-    explanatoryNote: string | IScenario;
+    explanatoryNote: string | IRichContent;
 
     @AllowNull(true)
     @Column(DataType.JSONB)

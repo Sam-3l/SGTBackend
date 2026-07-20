@@ -15,10 +15,23 @@ export enum IQuizType{
 }
 
 
+export interface IContentBlock{
+ equation?: string;
+ text?: string;
+ tables?: any[];
+}
+
+// What the frontend actually sends for question content, option content/explanation,
+// and explanatory notes: a list of blocks, each block being text and/or a table
+// and/or an equation.
+export interface IRichContent{
+ blocks: IContentBlock[];
+}
+
 export interface IQuestion{
-    content: string | IScenario;
+    content: string | IRichContent;
     isCorrect: boolean;
-    explanation?: string | IScenario;
+    explanation?: string | IRichContent;
     image?: string;
 }
 

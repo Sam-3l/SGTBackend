@@ -1,12 +1,29 @@
 import { registerDecorator, ValidationOptions, ValidationArguments } from "class-validator";
 
+const ALLOWED_BLOCK_KEYS = ["equation", "text", "tables"];
+
+function isValidBlock(block: any): boolean {
+  if (typeof block !== "object" || block === null || Array.isArray(block)) return false;
+
+  const keys = Object.keys(block);
+
+  if (!keys.every((key) => ALLOWED_BLOCK_KEYS.includes(key))) return false;
+
+  if (block.equation !== undefined && typeof block.equation !== "string") return false;
+  if (block.text !== undefined && typeof block.text !== "string") return false;
+  if (block.tables !== undefined && !Array.isArray(block.tables)) return false;
+
+  return true;
+}
+
 /**
- * Accepts the same shape as a question "scenario":
- *   - a plain string (kept for backwards compatibility with old data), OR
- *   - an object made up of any of: equation (string), text (string), tables (array)
+ * Accepts what the frontend actually sends for rich content fields
+ * (questionContent, explanatoryNote, answer option content/explanation):
+ *   - a plain string (legacy data), OR
+ *   - { blocks: [ { equation?, text?, tables? }, ... ] }
  *
- * Used on questionContent, explanatoryNote, and answer option content/explanation
- * so they can hold a table, a block of text, or a plain string, exactly like scenarios do.
+ * Also accepts a single flat { equation?, text?, tables? } object (no "blocks"
+ * wrapper) so older scenario-shaped payloads keep working.
  */
 export function IsRichContent(validationOptions?: ValidationOptions) {
   return function (object: Object, propertyName: string) {
@@ -21,27 +38,16 @@ export function IsRichContent(validationOptions?: ValidationOptions) {
 
           if (typeof value === "string") return true;
 
-          if (typeof value === "object" && !Array.isArray(value)) {
-            const allowedKeys = ["equation", "text", "tables"];
-            const keys = Object.keys(value);
+          if (typeof value !== "object" || Array.isArray(value)) return false;
 
-            if (keys.length === 0) return false;
-
-            const keysAreValid = keys.every((key) => allowedKeys.includes(key));
-
-            if (!keysAreValid) return false;
-
-            if (value.equation !== undefined && typeof value.equation !== "string") return false;
-            if (value.text !== undefined && typeof value.text !== "string") return false;
-            if (value.tables !== undefined && !Array.isArray(value.tables)) return false;
-
-            return true;
+          if (Array.isArray(value.blocks)) {
+            return value.blocks.length > 0 && value.blocks.every(isValidBlock);
           }
 
-          return false;
+          return isValidBlock(value);
         },
         defaultMessage(args: ValidationArguments) {
-          return `${args.property} must be a string, or an object containing any of: equation (string), text (string), tables (array)`;
+          return `${args.property} must be a string, or an object with a "blocks" array of { equation, text, tables } items`;
         }
       }
     });
