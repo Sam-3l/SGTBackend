@@ -603,6 +603,49 @@ async updateQuestion(quizId: string, id: string, data: UpdateQuestionDto, transa
     
   }
 
+  /**
+   * De-duplicates questions pulled from multiple quizzes (past + quick) before
+   * merging them into a "general" question set.
+   *
+   * De-duping only by `id` isn't enough: when the same question is created
+   * once under a past_question quiz and once under a quick_question quiz
+   * (two separate admin submissions for the same content), it ends up as two
+   * distinct rows with two distinct ids, so an id-based Map never catches it.
+   * Here we key on the actual question content + answer options instead, so
+   * two rows with identical content collapse into one, regardless of which
+   * quiz/id they came from. First occurrence encountered wins.
+   */
+  private dedupeQuestions(questions: any[]): any[] {
+    const seen = new Set<string>();
+    const result: any[] = [];
+
+    for (const q of questions) {
+      const key = JSON.stringify(q.questionContent ?? null) + '::' + JSON.stringify(q.answerOptions ?? null);
+
+      if (seen.has(key)) continue;
+
+      seen.add(key);
+      result.push(q);
+    }
+
+    return result;
+  }
+
+  /**
+   * `index` is only unique/comparable *within a single quiz* (it's assigned
+   * via a per-quizId counter). When merging questions from several quizzes
+   * (past_question + quick_question) into one general list, comparing by
+   * `index` causes collisions (e.g. question #1 of the past quiz and
+   * question #1 of the quick quiz both have index 1). `createdAt` is a
+   * genuinely global, monotonically increasing value, so it's used instead
+   * to order questions/groups once they've been merged across quizzes.
+   */
+  private getCreatedAtMs(question: any): number {
+    const createdAt = question?.createdAt ?? question?.dataValues?.createdAt;
+    const time = createdAt ? new Date(createdAt).getTime() : 0;
+    return Number.isNaN(time) ? 0 : time;
+  }
+
   async handleGeneralQuestionType(quiz: any, data: GetCourseDto, quizJson: any, throwIfEmpty: boolean = true) {
     const { page, limit, timeLimit } = data;
     const defaultLimit = quizJson.default;
@@ -639,10 +682,8 @@ async updateQuestion(quizId: string, id: string, data: UpdateQuestionDto, transa
     }
   
   
-    const uniqueQuestions = Array.from(
-      new Map(questions.map(q => [q.id, q])).values()
-    );
-    const orderedQuestions = uniqueQuestions.sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
+    const uniqueQuestions = this.dedupeQuestions(questions);
+    const orderedQuestions = uniqueQuestions.sort((a, b) => this.getCreatedAtMs(a) - this.getCreatedAtMs(b));
   
     const questionMap = new Map<string, any>();
     orderedQuestions.forEach(q => questionMap.set(q.id, q));
@@ -673,15 +714,15 @@ async updateQuestion(quizId: string, id: string, data: UpdateQuestionDto, transa
   
     const groups = Array.from(rootMap.entries()).map(([rootId, ids]) => {
       const groupQuestions = ids.map(id => questionMap.get(id));
-      groupQuestions.sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
+      groupQuestions.sort((a, b) => this.getCreatedAtMs(a) - this.getCreatedAtMs(b));
       return {
         rootId,
         questions: groupQuestions,
-        minIndex: groupQuestions[0]?.index ?? 0,
+        minCreatedAt: this.getCreatedAtMs(groupQuestions[0]),
       };
     });
   
-    groups.sort((a, b) => a.minIndex - b.minIndex);
+    groups.sort((a, b) => a.minCreatedAt - b.minCreatedAt);
   
     const finalLimit = limit || defaultLimit;
     let selectedQuestions: any[] = [];
@@ -722,9 +763,7 @@ async updateQuestion(quizId: string, id: string, data: UpdateQuestionDto, transa
       throw new BadRequestException("No questions available for general question type");
     }
   
-    const uniqueQuestions = Array.from(
-      new Map(questions.map((q) => [q.id, q])).values()
-    );
+    const uniqueQuestions = this.dedupeQuestions(questions);
   
     const shuffled = uniqueQuestions.sort(() => Math.random() - 0.5);
   
