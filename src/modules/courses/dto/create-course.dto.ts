@@ -291,6 +291,10 @@ export class CreateQuestionDto {
     @IsString()
     @IsOptional()
     dependsOnQuestionId: string;
+
+    @IsString()
+    @IsOptional()
+    linkedQuestionId: string;
 }
 
 export class UpdateQuestionDto {

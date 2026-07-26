@@ -79,12 +79,34 @@ export class CoursesService {
       scenarios: q.scenarios || null,
       instructions: q.instructions || null,
       paragraph: q.paragraph || null,
-      dependsOnQuestionId: q.dependsOnQuestionId || null
+      dependsOnQuestionId: q.dependsOnQuestionId || null,
+      linkedQuestionId: q.linkedQuestionId || null
     }));
 
     const individualHooks = true;
 
-  return await this.questionRepository.bulkCreate(questions, transaction, individualHooks);
+    const created = await this.questionRepository.bulkCreate(questions, transaction, individualHooks);
+
+    // If this question was created as the counterpart of an already-existing
+    // question (the frontend passes back the id it got from creating the
+    // first half, e.g. the quick_question copy, as linkedQuestionId on the
+    // second, e.g. past_question, copy), point the existing question back at
+    // this new one too, so the pair links both ways. Without this, only one
+    // side would know about the other.
+    for (let i = 0; i < data.length; i++) {
+      const linkedQuestionId = data[i]?.linkedQuestionId;
+      const newQuestion = created[i];
+
+      if (!linkedQuestionId || !newQuestion) continue;
+
+      await this.questionRepository.update(
+        { id: linkedQuestionId },
+        { linkedQuestionId: newQuestion.id },
+        transaction
+      );
+    }
+
+    return created;
 
   }
 
@@ -522,13 +544,41 @@ async updateQuestion(quizId: string, id: string, data: UpdateQuestionDto, transa
         updatePayload.answerOptions = mergedOptions;
     }
 
-    return await this.questionRepository.update({ quizId, id },  updatePayload, transaction);
+    const updated = await this.questionRepository.update({ quizId, id },  updatePayload, transaction);
+
+    // Keep the linked counterpart (this same question's copy in the other
+    // quiz - past <-> quick, including nodes inside a dependency/"split"
+    // chain) in sync. Only actual question content is shared across the
+    // link - quiz/chain-specific fields (index, dependsOnQuestionId) stay
+    // local to whichever quiz they belong to and must never be copied over.
+    if (existing.linkedQuestionId) {
+      const { index: _index, dependsOnQuestionId: _dependsOnQuestionId, ...contentPayload } = updatePayload;
+
+      if (Object.keys(contentPayload).length > 0) {
+        await this.questionRepository.update(
+          { id: existing.linkedQuestionId },
+          contentPayload,
+          transaction
+        );
+      }
+    }
+
+    return updated;
 }
 
   async deleteQuestion(quizId:string, id: string, transaction: Transaction){
       const individualHooks = true;
 
+      const existing = await this.questionRepository.findOne({ quizId, id });
+
       await this.questionRepository.delete({id, quizId}, transaction, individualHooks);
+
+      // A question created as a pair (pushed to both past and quick) must
+      // disappear from both sides at once - otherwise the surviving row
+      // resurfaces in the general list looking like the duplicate "came back".
+      if (existing?.linkedQuestionId) {
+        await this.questionRepository.delete({ id: existing.linkedQuestionId }, transaction, individualHooks);
+      }
   }
 
   async deleteQuiz(courseId:string, id:string, transaction: Transaction){
@@ -616,16 +666,26 @@ async updateQuestion(quizId: string, id: string, data: UpdateQuestionDto, transa
    * quiz/id they came from. First occurrence encountered wins.
    */
   private dedupeQuestions(questions: any[]): any[] {
-    const seen = new Set<string>();
+    const seenContentKeys = new Set<string>();
+    const consumedIds = new Set<string>();
     const result: any[] = [];
 
     for (const q of questions) {
+      // Already matched as the counterpart of a question we kept - skip it,
+      // regardless of whether its content happens to look identical or not.
+      if (consumedIds.has(q.id)) continue;
+
       const key = JSON.stringify(q.questionContent ?? null) + '::' + JSON.stringify(q.answerOptions ?? null);
 
-      if (seen.has(key)) continue;
+      if (seenContentKeys.has(key)) continue;
 
-      seen.add(key);
+      seenContentKeys.add(key);
       result.push(q);
+
+      // This question's linked counterpart (its copy in the other quiz)
+      // should never show up as a separate entry, so mark it as consumed
+      // up front rather than waiting to hit it further down the list.
+      if (q.linkedQuestionId) consumedIds.add(q.linkedQuestionId);
     }
 
     return result;

@@ -103,6 +103,17 @@ export class QuestionModel extends Model<QuestionModel>{
     @BelongsTo(() => QuestionModel, 'dependsOnQuestionId')
     dependsOnQuestion: QuestionModel;
 
+    // Points at this question's counterpart in the other quiz (past <-> quick)
+    // when the same question was created under both, so they can be deleted
+    // together and deduped structurally in the general question view.
+    @ForeignKey(() => QuestionModel)
+    @AllowNull(true)
+    @Column(DataType.UUID)
+    linkedQuestionId: string;
+
+    @BelongsTo(() => QuestionModel, 'linkedQuestionId')
+    linkedQuestion: QuestionModel;
+
 
     @BeforeCreate
     static async setIndex(instance: QuestionModel, options: any) {
