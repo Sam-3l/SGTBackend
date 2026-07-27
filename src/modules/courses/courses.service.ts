@@ -706,6 +706,27 @@ async updateQuestion(quizId: string, id: string, data: UpdateQuestionDto, transa
     return Number.isNaN(time) ? 0 : time;
   }
 
+  /**
+   * `index` on a question is only meaningful within its own quiz (past OR
+   * quick each keep their own counter). Once questions from both quizzes are
+   * merged into a "general" list, returning that raw index as-is means two
+   * completely unrelated questions can show the identical index (e.g. the
+   * 3rd question created in the past quiz and the 3rd question created in
+   * the quick quiz both display "index 3"). This recomputes a fresh,
+   * sequential index (1, 2, 3...) reflecting each question's actual position
+   * in the general list being returned - purely for display in this
+   * response. It never touches the database, so the real per-quiz `index`
+   * (used for ordering within its own quiz and for delete-renumbering)
+   * stays exactly as-is.
+   */
+  private assignGeneralIndex(questions: any[]): any[] {
+    return questions.map((q, i) => {
+      const plain = typeof q?.toJSON === 'function' ? q.toJSON() : { ...q };
+      plain.index = i + 1;
+      return plain;
+    });
+  }
+
   async handleGeneralQuestionType(quiz: any, data: GetCourseDto, quizJson: any, throwIfEmpty: boolean = true) {
     const { page, limit, timeLimit } = data;
     const defaultLimit = quizJson.default;
@@ -797,7 +818,7 @@ async updateQuestion(quizId: string, id: string, data: UpdateQuestionDto, transa
       ...quizJson,
       question: {
         total: validQuestions.length,   
-        rows: selectedQuestions,        
+        rows: this.assignGeneralIndex(selectedQuestions),
       },
     };
   }
@@ -831,7 +852,7 @@ async updateQuestion(quizId: string, id: string, data: UpdateQuestionDto, transa
       ...quizJson,
       question: {
         total: shuffled.length,
-        rows: shuffled,
+        rows: this.assignGeneralIndex(shuffled),
       },
     };
   }
