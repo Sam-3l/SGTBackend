@@ -45,6 +45,13 @@ export class UsersModel extends Model<UsersModel> {
     @Column(DataType.BOOLEAN)
     isEmailVerified: boolean;
 
+    // Session id embedded in the user's current valid access token. Set on
+    // login, cleared on logout. Used to enforce a single active session per
+    // account - see AuthGuard and AuthService.
+    @AllowNull(true)
+    @Column(DataType.UUID)
+    activeSessionId: string;
+
     @HasMany(() => PaymentModel)
     payments: PaymentModel[];
 

@@ -6,6 +6,7 @@ import * as bcrypt from "bcrypt";
 import { AdminService } from '../admin/admin.service';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { v4 as uuidv4 } from 'uuid';
 
 import { UsersService } from '../users/users.service';
 import { Transaction } from 'sequelize';
@@ -56,7 +57,7 @@ export class AuthService {
     };
   }
 
-  async loginUser(data: LoginDto, client: string){
+  async loginUser(data: LoginDto, client: string, transaction: Transaction){
    
     const { email, password } = data;
 
@@ -74,9 +75,18 @@ export class AuthService {
 
     if (!user.activated) throw new ForbiddenException("your account have been deactivated");
 
+    // Only one active session allowed per account. If one is already set,
+    // the account is currently logged in elsewhere - refuse this login
+    // instead of silently kicking the other session out.
+    if (user.activeSessionId) throw new ForbiddenException('This account is already logged in on another device. Please log out from there first.');
+
+    const sessionId = uuidv4();
+
+    await this.usersService.setActiveSession(user.id, sessionId, transaction);
+
     const secret = this.configService.get<string>('secretKey');
 
-    const accessToken = await this.jwtService.signAsync({ id: user.id, email, client }, { secret });
+    const accessToken = await this.jwtService.signAsync({ id: user.id, email, client, sessionId }, { secret });
 
     const userData = user.toJSON();
     
@@ -103,11 +113,19 @@ export class AuthService {
 
     if (!user.activated) throw new ForbiddenException("your account have been deactivated");
 
+    // Same single-active-session rule applies to Google sign-in - it's still
+    // the same user account, just a different login route.
+    if (user.activeSessionId) throw new ForbiddenException('This account is already logged in on another device. Please log out from there first.');
+
+    const sessionId = uuidv4();
+
+    await this.usersService.setActiveSession(user.id, sessionId, transaction);
+
      const secret = this.configService.get<string>('secretKey');
 
      const client = "user";
 
-    const accessToken = await this.jwtService.signAsync({ id: user.id, email, client}, { secret });
+    const accessToken = await this.jwtService.signAsync({ id: user.id, email, client, sessionId }, { secret });
 
     const userData = user.toJSON();
     
@@ -121,6 +139,14 @@ export class AuthService {
 
    
 
+  }
+
+  // Frees the account up to log in again (this device or another) and, since
+  // AuthGuard checks the token's sessionId against this on every request,
+  // immediately invalidates the token being logged out - not just a
+  // client-side formality.
+  async logoutUser(userId: string, transaction: Transaction){
+    await this.usersService.clearActiveSession(userId, transaction);
   }
 
 }

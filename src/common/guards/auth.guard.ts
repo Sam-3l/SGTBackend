@@ -4,6 +4,7 @@ import { JwtService } from '@nestjs/jwt';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { ConfigService } from '@nestjs/config';
 import { IS_LOGIN_KEY } from '../decorators/login.decorator';
+import { UsersService } from 'src/modules/users/users.service';
 
 
 
@@ -12,7 +13,8 @@ export class AuthGuard implements CanActivate {
   constructor(
     private jwtService: JwtService, 
     private reflector: Reflector,
-    private configService: ConfigService
+    private configService: ConfigService,
+    private usersService: UsersService
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -42,15 +44,30 @@ export class AuthGuard implements CanActivate {
    
     const privateKey = process.env.PRIVATE_KEY;
      
+    let decoded: any;
+
     try {
-      const decoded = await this.jwtService.verifyAsync(_token, { secret: privateKey });
-   
-      request.user = decoded;
+      decoded = await this.jwtService.verifyAsync(_token, { secret: privateKey });
     } catch (err) {
       if (/Token/.test(err.name)) throw new UnauthorizedException('Invalid token');
       
       throw err;
     }
+
+    // Single-active-session enforcement for paying user accounts: a token is
+    // only good for as long as its sessionId still matches the account's
+    // current one. It stops matching the moment the user logs out (cleared
+    // to null) - old tokens can't keep working after that just because they
+    // haven't expired.
+    if (client.toLowerCase() === 'user') {
+      const user = await this.usersService.findUserByEmail(decoded.email);
+
+      if (!user || !decoded.sessionId || user["activeSessionId"] !== decoded.sessionId) {
+        throw new UnauthorizedException('Session expired or logged in on another device. Please log in again.');
+      }
+    }
+
+    request.user = decoded;
 
     return true;
   }

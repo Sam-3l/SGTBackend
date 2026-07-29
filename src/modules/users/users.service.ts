@@ -214,6 +214,20 @@ export class UsersService {
     await this.usersRepository.delete({id}, transaction);
   }
 
+  // Records the session id embedded in the token just issued at login, so
+  // AuthGuard can recognise it on later requests and a second login attempt
+  // can be blocked while it's still set.
+  async setActiveSession(id: string, sessionId: string, transaction: Transaction){
+    await this.usersRepository.update({id}, {activeSessionId: sessionId}, transaction);
+  }
+
+  // Clears the active session on logout, freeing the account up to log in
+  // again (from the same or a different device) and immediately making the
+  // token that was just logged out of invalid for any further requests.
+  async clearActiveSession(id: string, transaction: Transaction){
+    await this.usersRepository.update({id}, {activeSessionId: null}, transaction);
+  }
+
 }
 
 

@@ -8,6 +8,7 @@ import { TransactionParam } from 'src/common/decorators/transaction-param.decora
 import { Transaction } from 'sequelize';
 import { Login } from 'src/common/decorators/login.decorator';
 import { AuthGuard } from '@nestjs/passport';
+import { User } from 'src/common/decorators/user.decorator';
 
 @Controller('auth')
 export class AuthController {
@@ -25,8 +26,15 @@ export class AuthController {
   @Post('login/user')
   @ResponseMessage('Logged in successfully')
   @HttpCode(200)
-  async loginUser(@Body() body: LoginDto, @Headers("client") client: string) {
-    return await this.authService.loginUser(body, client);
+  async loginUser(@Body() body: LoginDto, @Headers("client") client: string, @TransactionParam() transaction: Transaction) {
+    return await this.authService.loginUser(body, client, transaction);
+  }
+
+  @Post('logout')
+  @ResponseMessage('Logged out successfully')
+  @HttpCode(200)
+  async logout(@User('id') userId: string, @TransactionParam() transaction: Transaction) {
+    return await this.authService.logoutUser(userId, transaction);
   }
   
 
