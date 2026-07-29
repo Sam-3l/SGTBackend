@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { LoginDto } from './dto/create-auth.dto';
 import { UpdateAuthDto } from './dto/update-auth.dto';
 import { AdminModel } from '../admin/models/admin.model';
@@ -78,7 +78,10 @@ export class AuthService {
     // Only one active session allowed per account. If one is already set,
     // the account is currently logged in elsewhere - refuse this login
     // instead of silently kicking the other session out.
-    if (user.activeSessionId) throw new ForbiddenException('This account is already logged in on another device. Please log out from there first.');
+    // Uses ConflictException (409), not ForbiddenException (403), so this
+    // case is distinguishable from "email not verified" / "deactivated"
+    // on the client - those stay 403, this is 409.
+    if (user.activeSessionId) throw new ConflictException('This account is already logged in on another device. Please log out from there first.');
 
     const sessionId = uuidv4();
 
@@ -115,7 +118,8 @@ export class AuthService {
 
     // Same single-active-session rule applies to Google sign-in - it's still
     // the same user account, just a different login route.
-    if (user.activeSessionId) throw new ForbiddenException('This account is already logged in on another device. Please log out from there first.');
+    // Same ConflictException (409) as loginUser, for the same reason.
+    if (user.activeSessionId) throw new ConflictException('This account is already logged in on another device. Please log out from there first.');
 
     const sessionId = uuidv4();
 
@@ -150,4 +154,3 @@ export class AuthService {
   }
 
 }
-
