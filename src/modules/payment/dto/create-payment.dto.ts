@@ -12,6 +12,19 @@ export class MakePaymentDto {
 }
 
 
+export class AttachCourseDto {
+
+    @IsString()
+    @IsNotEmpty()
+    userId: string
+
+    @IsString()
+    @IsNotEmpty()
+    courseId: string
+
+}
+
+
 export class GetPageDto{
    
    @IsNumber()

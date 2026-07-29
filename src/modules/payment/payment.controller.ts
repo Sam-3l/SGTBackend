@@ -3,7 +3,7 @@ import { PaymentService } from './payment.service';
 import { ResponseMessage } from 'src/common/decorators/response-message.decorator';
 import { TransactionParam } from 'src/common/decorators/transaction-param.decorator';
 import { Transaction } from 'sequelize';
-import { GetMonthlyDto, GetPageDto, MakePaymentDto, VerifyPaymentDto } from './dto/create-payment.dto';
+import { AttachCourseDto, GetMonthlyDto, GetPageDto, MakePaymentDto, VerifyPaymentDto } from './dto/create-payment.dto';
 import { User } from 'src/common/decorators/user.decorator';
 import { IUser } from '../users/interfaces/users.interface';
 import { Public } from 'src/common/decorators/public.decorator';
@@ -27,6 +27,17 @@ export class PaymentController {
 
     return await this.paymentService.makePayment(user,body, transaction);
   
+  }
+
+
+  @Role(IRole.SUPER_ADMIN)
+  @Post("attach-course")
+  @HttpCode(201)
+  @ResponseMessage("course attached to user successfully")
+  async attachCourse(@Body() body: AttachCourseDto, @TransactionParam() transaction: Transaction){
+
+    return await this.paymentService.attachCourse(body.userId, body.courseId, transaction);
+
   }
 
 

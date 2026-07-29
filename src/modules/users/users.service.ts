@@ -144,6 +144,10 @@ export class UsersService {
        return await this.usersRepository.findOne({email});
    }
 
+   async findUserById(id: string){
+       return await this.usersRepository.findById(id);
+   }
+
    async createGoogleAccount(data: any, transaction: Transaction){
      
     const {email, fullName} =  data;

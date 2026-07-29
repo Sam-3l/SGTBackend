@@ -88,6 +88,57 @@ export class PaymentService {
 
   }
 
+  /**
+   * Admin-granted course access - used to give a user a course without them
+   * paying (bonus access, students who paid physically/offline, etc). This
+   * creates a real `Payment` row with status successful directly, the exact
+   * same record shape and expiration math a real Flutterwave payment ends
+   * up with via `paymentConfirmation`. Access checks elsewhere in the app
+   * (e.g. `hasAccess` in courses) only ever look for that row, so nothing
+   * else needs to know this course wasn't actually paid for.
+   *
+   * tx_ref is prefixed "ADMIN-" (instead of a Flutterwave reference) so
+   * these are distinguishable from real payments in transaction history.
+   */
+  async attachCourse(userId: string, courseId: string, transaction: Transaction) {
+
+    const userData = await this.usersService.findUserById(userId);
+
+    if (!userData) throw new BadRequestException("User not found");
+
+    const course = await this.coursesService.findCourse(courseId);
+
+    const courseContent = course.toJSON();
+
+    const activeEnrollment = await this.paymentRepository.findOne({
+      userId,
+      courseId,
+      status: IStatus.successful,
+      expirationDate: { [Op.gt]: new Date() },
+    });
+
+    if (activeEnrollment) throw new BadRequestException(`This user already has an active enrollment for this course. Their access expires on ${activeEnrollment.expirationDate.toISOString().split('T')[0]}.`);
+
+    const purchaseDate = new Date();
+
+    const expirationDate = new Date(purchaseDate);
+
+    expirationDate.setMonth(expirationDate.getMonth() + courseContent.durationMonths);
+
+    const tx_ref = `ADMIN-${helpers.referenceGenerator()}`;
+
+    const val = {
+      userId,
+      courseId,
+      tx_ref,
+      status: IStatus.successful,
+      expirationDate,
+    };
+
+    return await this.paymentRepository.create(val, transaction);
+
+  }
+
   async paymentConfirmation(data: VerifyPaymentDto, transaction: Transaction ){
     
       const {tx_ref} = data;
