@@ -11,6 +11,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { UsersService } from '../users/users.service';
 import { Transaction } from 'sequelize';
 import { UsersModel } from '../users/models/users.model.';
+import constants from 'src/common/utils/constants';
 
 @Injectable()
 export class AuthService {
@@ -57,6 +58,19 @@ export class AuthService {
     };
   }
 
+  // A session counts as stale once it's older than ACTIVE_SESSION_TTL_SECONDS.
+  // Covers logout never actually running - crash, cleared browser storage, a
+  // failed network call, a frontend that (like ours did) never wired up the
+  // logout endpoint. Without this, one of those would lock a paying user out
+  // of their own account with no automatic way back in.
+  private isActiveSessionStale(activeSessionCreatedAt: Date | null): boolean {
+    if (!activeSessionCreatedAt) return true;
+
+    const ageSeconds = (Date.now() - new Date(activeSessionCreatedAt).getTime()) / 1000;
+
+    return ageSeconds > constants.SESSION.ACTIVE_SESSION_TTL_SECONDS;
+  }
+
   async loginUser(data: LoginDto, client: string, transaction: Transaction){
    
     const { email, password } = data;
@@ -75,13 +89,22 @@ export class AuthService {
 
     if (!user.activated) throw new ForbiddenException("your account have been deactivated");
 
-    // Only one active session allowed per account. If one is already set,
-    // the account is currently logged in elsewhere - refuse this login
-    // instead of silently kicking the other session out.
-    // Uses ConflictException (409), not ForbiddenException (403), so this
-    // case is distinguishable from "email not verified" / "deactivated"
-    // on the client - those stay 403, this is 409.
-    if (user.activeSessionId) throw new ConflictException('This account is already logged in on another device. Please log out from there first.');
+    // Only one active session allowed per account. If one is already set
+    // AND it's still within its TTL, the account is genuinely logged in
+    // elsewhere - refuse this login instead of silently kicking the other
+    // session out. Uses ConflictException (409), not ForbiddenException
+    // (403), so this case is distinguishable from "email not verified" /
+    // "deactivated" on the client - those stay 403, this is 409.
+    // If it's past its TTL, logout most likely never actually ran (crash,
+    // cleared storage, a frontend bug) - self-heal by clearing it here
+    // rather than leaving the account permanently locked out.
+    if (user.activeSessionId) {
+      if (!this.isActiveSessionStale(user.activeSessionCreatedAt)) {
+        throw new ConflictException('This account is already logged in on another device. Please log out from there first.');
+      }
+
+      await this.usersService.clearActiveSession(user.id, transaction);
+    }
 
     const sessionId = uuidv4();
 
@@ -89,7 +112,7 @@ export class AuthService {
 
     const secret = this.configService.get<string>('secretKey');
 
-    const accessToken = await this.jwtService.signAsync({ id: user.id, email, client, sessionId }, { secret });
+    const accessToken = await this.jwtService.signAsync({ id: user.id, email, client, sessionId }, { secret, expiresIn: constants.SESSION.ACTIVE_SESSION_TTL_JWT });
 
     const userData = user.toJSON();
     
@@ -117,9 +140,16 @@ export class AuthService {
     if (!user.activated) throw new ForbiddenException("your account have been deactivated");
 
     // Same single-active-session rule applies to Google sign-in - it's still
-    // the same user account, just a different login route.
-    // Same ConflictException (409) as loginUser, for the same reason.
-    if (user.activeSessionId) throw new ConflictException('This account is already logged in on another device. Please log out from there first.');
+    // the same user account, just a different login route. Same
+    // ConflictException (409) and same self-healing stale-session check as
+    // loginUser, for the same reasons.
+    if (user.activeSessionId) {
+      if (!this.isActiveSessionStale(user.activeSessionCreatedAt)) {
+        throw new ConflictException('This account is already logged in on another device. Please log out from there first.');
+      }
+
+      await this.usersService.clearActiveSession(user.id, transaction);
+    }
 
     const sessionId = uuidv4();
 
@@ -129,7 +159,7 @@ export class AuthService {
 
      const client = "user";
 
-    const accessToken = await this.jwtService.signAsync({ id: user.id, email, client, sessionId }, { secret });
+    const accessToken = await this.jwtService.signAsync({ id: user.id, email, client, sessionId }, { secret, expiresIn: constants.SESSION.ACTIVE_SESSION_TTL_JWT });
 
     const userData = user.toJSON();
     
@@ -154,3 +184,4 @@ export class AuthService {
   }
 
 }
+

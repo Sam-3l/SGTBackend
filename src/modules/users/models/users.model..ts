@@ -52,6 +52,14 @@ export class UsersModel extends Model<UsersModel> {
     @Column(DataType.UUID)
     activeSessionId: string;
 
+    // When activeSessionId was set. Lets AuthService tell a live session
+    // apart from a stale one that never got cleared, so it can self-clear
+    // after constants.SESSION.ACTIVE_SESSION_TTL_SECONDS rather than
+    // requiring logout to have actually run - see AuthService.loginUser.
+    @AllowNull(true)
+    @Column(DataType.DATE)
+    activeSessionCreatedAt: Date;
+
     @HasMany(() => PaymentModel)
     payments: PaymentModel[];
 
