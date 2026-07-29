@@ -845,14 +845,23 @@ async updateQuestion(quizId: string, id: string, data: UpdateQuestionDto, transa
     }
   
     const uniqueQuestions = this.dedupeQuestions(questions);
-  
-    const shuffled = uniqueQuestions.sort(() => Math.random() - 0.5);
-  
+
+    // Previously sorted with `Math.random() - 0.5`, which reshuffled the
+    // entire list on every single request. Combined with assignGeneralIndex
+    // recomputing 1..N fresh each time, that meant a newly created question
+    // could land anywhere in the numbering - including earlier than
+    // questions that already existed - instead of consistently appearing
+    // after them. Ordering by createdAt (same as handleGeneralQuestionType)
+    // keeps that order, and therefore the displayed index, stable across
+    // requests: existing questions keep their relative position and new
+    // ones are always appended at the end.
+    const ordered = uniqueQuestions.sort((a, b) => this.getCreatedAtMs(a) - this.getCreatedAtMs(b));
+
     return {
       ...quizJson,
       question: {
-        total: shuffled.length,
-        rows: this.assignGeneralIndex(shuffled),
+        total: ordered.length,
+        rows: this.assignGeneralIndex(ordered),
       },
     };
   }
