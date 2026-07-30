@@ -4,6 +4,7 @@ import { JwtService } from '@nestjs/jwt';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { ConfigService } from '@nestjs/config';
 import { IS_LOGIN_KEY } from '../decorators/login.decorator';
+import { IS_BYPASS_SESSION_CHECK_KEY } from '../decorators/bypass-session-check.decorator';
 import { UsersService } from 'src/modules/users/users.service';
 
 
@@ -22,6 +23,8 @@ export class AuthGuard implements CanActivate {
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [context.getHandler(), context.getClass()]);
 
     const isLogin = this.reflector.getAllAndOverride<boolean>(IS_LOGIN_KEY, [context.getHandler(), context.getClass()]);
+
+    const bypassSessionCheck = this.reflector.getAllAndOverride<boolean>(IS_BYPASS_SESSION_CHECK_KEY, [context.getHandler(), context.getClass()]);
 
 
     if (isPublic || isLogin) return true;
@@ -59,7 +62,7 @@ export class AuthGuard implements CanActivate {
     // current one. It stops matching the moment the user logs out (cleared
     // to null) - old tokens can't keep working after that just because they
     // haven't expired.
-    if (client.toLowerCase() === 'user') {
+    if (client.toLowerCase() === 'user' && !bypassSessionCheck) {
       const user = await this.usersService.findUserByEmail(decoded.email);
 
       if (!user || !decoded.sessionId || user["activeSessionId"] !== decoded.sessionId) {

@@ -9,6 +9,7 @@ import { Transaction } from 'sequelize';
 import { Login } from 'src/common/decorators/login.decorator';
 import { AuthGuard } from '@nestjs/passport';
 import { User } from 'src/common/decorators/user.decorator';
+import { BypassSessionCheck } from 'src/common/decorators/bypass-session-check.decorator';
 
 @Controller('auth')
 export class AuthController {
@@ -30,6 +31,7 @@ export class AuthController {
     return await this.authService.loginUser(body, client, transaction);
   }
 
+  @BypassSessionCheck()
   @Post('logout')
   @ResponseMessage('Logged out successfully')
   @HttpCode(200)
