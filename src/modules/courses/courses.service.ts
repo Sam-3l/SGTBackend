@@ -149,6 +149,12 @@ export class CoursesService {
         
     } 
 
+    if(question?.data){
+      question.data = this.attachComputedQuestionRanges(
+        question.data.map((q: any) => typeof q?.toJSON === 'function' ? q.toJSON() : q)
+      );
+    }
+
     return {
       ...quizJson,
       question  
@@ -194,6 +200,12 @@ export class CoursesService {
 
         
     } 
+
+    if(question?.data){
+      question.data = this.attachComputedQuestionRanges(
+        question.data.map((q: any) => typeof q?.toJSON === 'function' ? q.toJSON() : q)
+      );
+    }
 
     return {
       ...quizJson,
@@ -727,6 +739,91 @@ async updateQuestion(quizId: string, id: string, data: UpdateQuestionDto, transa
     });
   }
 
+  /**
+   * Parses a question's `paragraph` field looking for a question-range block
+   * (the "Applies to Questions From/To" data). Two storage shapes exist:
+   *  - current: { blocks: [ { questionStart, questionEnd, ... }, ... ] } -
+   *    only blocks[0] ever carries a range, later blocks never do.
+   *  - legacy: the range sits directly on the parsed object, no `blocks`
+   *    array at all.
+   * Returns null if `paragraph` is missing, isn't valid JSON, or doesn't
+   * contain a range at all (e.g. shared passage text with no numeric
+   * block) - in every one of those cases there's nothing to correct.
+   */
+  private parseParagraphRange(raw: string): { parsed: any; target: any } | null {
+    if (!raw) return null;
+
+    let parsed: any;
+
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+
+    if (!parsed || typeof parsed !== 'object') return null;
+
+    const target = Array.isArray(parsed.blocks) && parsed.blocks.length > 0
+      ? parsed.blocks[0]
+      : parsed;
+
+    if (target.questionStart === undefined && target.questionEnd === undefined) return null;
+
+    return { parsed, target };
+  }
+
+  /**
+   * `questionStart`/`questionEnd` inside `paragraph` are numbers an admin
+   * typed by hand when the block was created ("Applies to Questions 4-6").
+   * They're never recalculated, so they go stale the moment questions get
+   * reordered, inserted, or deleted - or the moment the same question shows
+   * up in a different view with different numbering (e.g. its own quiz vs
+   * the merged general list). This recomputes them fresh for whatever list
+   * is being returned right now, purely for display - same non-persisting
+   * approach as assignGeneralIndex above, and it never touches the database
+   * or the raw stored value.
+   *
+   * Every question in a block gets a byte-identical copy of `paragraph` -
+   * nothing is computed per-question, the same JSON is just duplicated onto
+   * every row in the group - so contiguous questions in the ordered list
+   * sharing the exact same raw `paragraph` string are treated as one block,
+   * and its corrected range becomes [first question's index, last
+   * question's index] as they appear in *this* response.
+   *
+   * Expects `questions` to already be in final display order with a final
+   * `index` set on each row (i.e. run this after assignGeneralIndex, or on
+   * rows carrying their real per-quiz index).
+   */
+  private attachComputedQuestionRanges(questions: any[]): any[] {
+    let i = 0;
+
+    while (i < questions.length) {
+      const raw = questions[i]?.paragraph;
+
+      if (!raw) { i++; continue; }
+
+      let j = i;
+      while (j + 1 < questions.length && questions[j + 1]?.paragraph === raw) j++;
+
+      const rangeInfo = this.parseParagraphRange(raw);
+
+      if (rangeInfo) {
+        rangeInfo.target.questionStart = String(questions[i].index);
+        rangeInfo.target.questionEnd = String(questions[j].index);
+
+        const updatedRaw = JSON.stringify(rangeInfo.parsed);
+
+        for (let k = i; k <= j; k++) {
+          questions[k].paragraph = updatedRaw;
+        }
+      }
+
+      i = j + 1;
+    }
+
+    return questions;
+  }
+
   async handleGeneralQuestionType(quiz: any, data: GetCourseDto, quizJson: any, throwIfEmpty: boolean = true) {
     const { page, limit, timeLimit } = data;
     const defaultLimit = quizJson.default;
@@ -818,7 +915,7 @@ async updateQuestion(quizId: string, id: string, data: UpdateQuestionDto, transa
       ...quizJson,
       question: {
         total: validQuestions.length,   
-        rows: this.assignGeneralIndex(selectedQuestions),
+        rows: this.attachComputedQuestionRanges(this.assignGeneralIndex(selectedQuestions)),
       },
     };
   }
@@ -861,7 +958,7 @@ async updateQuestion(quizId: string, id: string, data: UpdateQuestionDto, transa
       ...quizJson,
       question: {
         total: ordered.length,
-        rows: this.assignGeneralIndex(ordered),
+        rows: this.attachComputedQuestionRanges(this.assignGeneralIndex(ordered)),
       },
     };
   }
