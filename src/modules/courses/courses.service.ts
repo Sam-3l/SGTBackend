@@ -783,15 +783,19 @@ async updateQuestion(quizId: string, id: string, data: UpdateQuestionDto, transa
    * approach as assignGeneralIndex above, and it never touches the database
    * or the raw stored value.
    *
-   * A block's members are identified two ways, either is enough to link a
-   * row into the block started at `questions[i]`:
+   * A block's members are identified three ways, any one is enough to link
+   * a row into the block started at `questions[i]`:
    *  - `dependsOnQuestionId` on a later row equals the `id` of an earlier
-   *    row already in this block (the reliable signal - confirmed against
-   *    real data: only the first row of a block carries `paragraph`, the
-   *    rest are `null`, so `paragraph` equality alone cannot find them).
+   *    row already in this block (confirmed against real data: only the
+   *    first row of a newly-created block carries `paragraph`, the rest
+   *    are `null`, so `paragraph` equality alone cannot find them).
+   *  - `instructions` on the row shares the same block id prefix (the part
+   *    before the `:`) as the block's starting row - confirmed against real
+   *    legacy data: every row in an older block carries `instructions` like
+   *    "msbyabk0pz6k:7-9", but each row's own `paragraph` only shows its
+   *    own single number, so neither of the other two signals catch it.
    *  - the row's raw `paragraph` string is byte-identical to the block's
-   *    starting row (kept only as a fallback for legacy rows saved before
-   *    `dependsOnQuestionId` was used for this).
+   *    starting row (kept as a last-resort fallback).
    * Once a block's membership is known, its corrected range becomes [first
    * question's index, last question's index] as they appear in *this*
    * response, and every row in the block gets that corrected range written
@@ -801,6 +805,12 @@ async updateQuestion(quizId: string, id: string, data: UpdateQuestionDto, transa
    * `index` set on each row (i.e. run this after assignGeneralIndex, or on
    * rows carrying their real per-quiz index).
    */
+  private blockIdFromInstructions(instructions: string): string | null {
+    if (!instructions) return null;
+    const [blockId] = instructions.split(':');
+    return blockId || null;
+  }
+
   private attachComputedQuestionRanges(questions: any[]): any[] {
     let i = 0;
 
@@ -810,14 +820,16 @@ async updateQuestion(quizId: string, id: string, data: UpdateQuestionDto, transa
       if (!raw) { i++; continue; }
 
       const blockIds = new Set<string>([questions[i]?.id].filter(Boolean));
+      const startBlockId = this.blockIdFromInstructions(questions[i]?.instructions);
 
       let j = i;
       while (j + 1 < questions.length) {
         const next = questions[j + 1];
         const linkedByDependency = next?.dependsOnQuestionId && blockIds.has(next.dependsOnQuestionId);
+        const linkedByInstructions = startBlockId && this.blockIdFromInstructions(next?.instructions) === startBlockId;
         const linkedByLegacyParagraph = next?.paragraph === raw;
 
-        if (!linkedByDependency && !linkedByLegacyParagraph) break;
+        if (!linkedByDependency && !linkedByInstructions && !linkedByLegacyParagraph) break;
 
         j++;
         if (next?.id) blockIds.add(next.id);
