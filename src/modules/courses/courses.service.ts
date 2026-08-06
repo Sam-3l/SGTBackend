@@ -783,12 +783,19 @@ async updateQuestion(quizId: string, id: string, data: UpdateQuestionDto, transa
    * approach as assignGeneralIndex above, and it never touches the database
    * or the raw stored value.
    *
-   * Every question in a block gets a byte-identical copy of `paragraph` -
-   * nothing is computed per-question, the same JSON is just duplicated onto
-   * every row in the group - so contiguous questions in the ordered list
-   * sharing the exact same raw `paragraph` string are treated as one block,
-   * and its corrected range becomes [first question's index, last
-   * question's index] as they appear in *this* response.
+   * A block's members are identified two ways, either is enough to link a
+   * row into the block started at `questions[i]`:
+   *  - `dependsOnQuestionId` on a later row equals the `id` of an earlier
+   *    row already in this block (the reliable signal - confirmed against
+   *    real data: only the first row of a block carries `paragraph`, the
+   *    rest are `null`, so `paragraph` equality alone cannot find them).
+   *  - the row's raw `paragraph` string is byte-identical to the block's
+   *    starting row (kept only as a fallback for legacy rows saved before
+   *    `dependsOnQuestionId` was used for this).
+   * Once a block's membership is known, its corrected range becomes [first
+   * question's index, last question's index] as they appear in *this*
+   * response, and every row in the block gets that corrected range written
+   * onto its `paragraph`.
    *
    * Expects `questions` to already be in final display order with a final
    * `index` set on each row (i.e. run this after assignGeneralIndex, or on
@@ -802,8 +809,19 @@ async updateQuestion(quizId: string, id: string, data: UpdateQuestionDto, transa
 
       if (!raw) { i++; continue; }
 
+      const blockIds = new Set<string>([questions[i]?.id].filter(Boolean));
+
       let j = i;
-      while (j + 1 < questions.length && questions[j + 1]?.paragraph === raw) j++;
+      while (j + 1 < questions.length) {
+        const next = questions[j + 1];
+        const linkedByDependency = next?.dependsOnQuestionId && blockIds.has(next.dependsOnQuestionId);
+        const linkedByLegacyParagraph = next?.paragraph === raw;
+
+        if (!linkedByDependency && !linkedByLegacyParagraph) break;
+
+        j++;
+        if (next?.id) blockIds.add(next.id);
+      }
 
       const rangeInfo = this.parseParagraphRange(raw);
 
@@ -866,13 +884,19 @@ async updateQuestion(quizId: string, id: string, data: UpdateQuestionDto, transa
     const questionMap = new Map<string, any>();
     orderedQuestions.forEach(q => questionMap.set(q.id, q));
   
-    const validQuestions = orderedQuestions.filter(q => {
-      if (!q.dependsOnQuestionId) return true;
-      return questionMap.has(q.dependsOnQuestionId);
-    });
+    // Previously this filtered out any question whose dependsOnQuestionId
+    // didn't resolve to another row in the current fetch, silently dropping
+    // it from the response entirely - confirmed against real data to happen
+    // when a question's dependsOnQuestionId was mistakenly set to a
+    // cross-quiz-type linked id instead of its own-quiz predecessor, so the
+    // row failed this check and vanished. A broken/unresolved link should
+    // never make a question disappear, so every question is kept here;
+    // findRoot below already falls back to treating a row with an
+    // unresolved parent as its own standalone root.
+    const validQuestions = orderedQuestions;
   
     if (validQuestions.length === 0) {
-      if (throwIfEmpty) throw new BadRequestException("No complete dependency chains found, This quiz is temporarily unavailable");
+      if (throwIfEmpty) throw new BadRequestException("No questions available for general question type");
       return null;
     }
   
