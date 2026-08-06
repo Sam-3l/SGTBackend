@@ -801,9 +801,13 @@ async updateQuestion(quizId: string, id: string, data: UpdateQuestionDto, transa
    * response, and every row in the block gets that corrected range written
    * onto its `paragraph`.
    *
-   * Expects `questions` to already be in final display order with a final
-   * `index` set on each row (i.e. run this after assignGeneralIndex, or on
-   * rows carrying their real per-quiz index).
+   * Grouping is adjacency-based (walks the array looking for the next row
+   * that belongs to the current block), so the input must actually be in
+   * `index` order for it to mean anything. The query this runs on never
+   * specifies an ORDER BY, so the DB's row order isn't guaranteed and can
+   * silently change (confirmed: editing a row can physically relocate it in
+   * Postgres) - sorting by `index` here makes the grouping correct
+   * regardless of whatever order the DB happened to hand back.
    */
   private blockIdFromInstructions(instructions: string): string | null {
     if (!instructions) return null;
@@ -812,6 +816,8 @@ async updateQuestion(quizId: string, id: string, data: UpdateQuestionDto, transa
   }
 
   private attachComputedQuestionRanges(questions: any[]): any[] {
+    questions = [...questions].sort((a, b) => (a?.index ?? 0) - (b?.index ?? 0));
+
     let i = 0;
 
     while (i < questions.length) {
