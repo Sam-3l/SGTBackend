@@ -117,6 +117,11 @@ export class QuestionModel extends Model<QuestionModel>{
 
     @BeforeCreate
     static async setIndex(instance: QuestionModel, options: any) {
+      // Respect an index the caller already assigned on purpose (used when
+      // inserting a question into the middle of a quiz - e.g. extending an
+      // existing merge block - rather than appending it at the end).
+      if (instance.index != null) return;
+
       const maxIndex = await QuestionModel.max('index', { where: { quizId: instance.quizId }, transaction: options.transaction }) as number | null;  
     
       instance.index = (maxIndex ?? 0) + 1; 

@@ -5,7 +5,7 @@ import { ChapterRepository } from './repositories/chapter.repository';
 import { QuestionRepository } from './repositories/question.repository';
 import { QuizRepository } from './repositories/quiz.repository';
 import { QuizAttemptRepository } from './repositories/QuizAttempt.repository';
-import { Op, Sequelize, Transaction, where } from 'sequelize';
+import { Op, Sequelize, Transaction, where, literal } from 'sequelize';
 import { QuizModel } from './models/quiz.model';
 import { ChapterModel } from './models/chapter.model';
 import { IUser } from '../users/interfaces/users.interface';
@@ -64,28 +64,66 @@ export class CoursesService {
 
     if(!quiz) throw new BadRequestException("Quiz does not exist");
 
-    const questions = data.map((q) => ({
-      quizId,
-      questionContent: q.questionContent,
-      imagePath: q.imagePath || null,
-      imageType: q.imageType || null,
-      publicId: q.publicId || null,
-      explanatoryVideoUrl: q.explanatoryVideoUrl || null,
-      year: q.year || null,
-      diet: q.diet || null,
-      answerOptions: q.answerOptions,
-      courseType: q.courseType || null,
-      explanatoryNote: q.explanatoryNote || null,
-      scenarios: q.scenarios || null,
-      instructions: q.instructions || null,
-      paragraph: q.paragraph || null,
-      dependsOnQuestionId: q.dependsOnQuestionId || null,
-      linkedQuestionId: q.linkedQuestionId || null
-    }));
+    const created: QuestionModel[] = [];
 
-    const individualHooks = true;
+    for (const q of data) {
+      const payload: any = {
+        quizId,
+        questionContent: q.questionContent,
+        imagePath: q.imagePath || null,
+        imageType: q.imageType || null,
+        publicId: q.publicId || null,
+        explanatoryVideoUrl: q.explanatoryVideoUrl || null,
+        year: q.year || null,
+        diet: q.diet || null,
+        answerOptions: q.answerOptions,
+        courseType: q.courseType || null,
+        explanatoryNote: q.explanatoryNote || null,
+        scenarios: q.scenarios || null,
+        instructions: q.instructions || null,
+        paragraph: q.paragraph || null,
+        dependsOnQuestionId: q.dependsOnQuestionId || null,
+        linkedQuestionId: q.linkedQuestionId || null
+      };
 
-    const created = await this.questionRepository.bulkCreate(questions, transaction, individualHooks);
+      // A question is created one of two ways:
+      //  - normal: appended after every existing question in the quiz (the
+      //    default @BeforeCreate behaviour on QuestionModel).
+      //  - extending an EXISTING merge block that isn't at the end of the
+      //    quiz - dependsOnQuestionId points at a question that's already in
+      //    the DB (not one created earlier in this same batch). That one has
+      //    to be physically inserted right after the question it depends on,
+      //    with every later question in the quiz shifted up by one to make
+      //    room. Otherwise it lands at the very end of the quiz instead of
+      //    next to the block it belongs to, and the range-grouping logic
+      //    (which relies on block members being adjacent once sorted by
+      //    index) will never see them as linked.
+      const anchor = payload.dependsOnQuestionId
+        ? await QuestionModel.findOne({ where: { id: payload.dependsOnQuestionId, quizId }, transaction })
+        : null;
+
+      if (anchor) {
+        const insertionIndex = anchor.index + 1;
+
+        // Shifted through a temporary negative range first, so the per-quiz
+        // (quizId, index) uniqueness constraint never sees two rows sharing
+        // a value while the shift is in progress.
+        await QuestionModel.update(
+          { index: literal('-index') } as any,
+          { where: { quizId, index: { [Op.gte]: insertionIndex } }, transaction }
+        );
+        await QuestionModel.update(
+          { index: literal('-index + 1') } as any,
+          { where: { quizId, index: { [Op.lt]: 0 } }, transaction }
+        );
+
+        const row = await QuestionModel.create({ ...payload, index: insertionIndex }, { transaction });
+        created.push(row);
+      } else {
+        const row = await QuestionModel.create(payload, { transaction });
+        created.push(row);
+      }
+    }
 
     // If this question was created as the counterpart of an already-existing
     // question (the frontend passes back the id it got from creating the
