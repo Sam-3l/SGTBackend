@@ -83,7 +83,8 @@ export class CoursesService {
         instructions: q.instructions || null,
         paragraph: q.paragraph || null,
         dependsOnQuestionId: q.dependsOnQuestionId || null,
-        linkedQuestionId: q.linkedQuestionId || null
+        linkedQuestionId: q.linkedQuestionId || null,
+        linkedQuestionChapterId: q.linkedQuestionChapterId || null
       };
 
       // A question is created one of two ways:

@@ -1,5 +1,6 @@
 import { AfterDestroy, AllowNull, BeforeCreate, BeforeDefine, BelongsTo, Column, DataType, Default, ForeignKey, Model, PrimaryKey, Table } from "sequelize-typescript";
 import { QuizModel } from "./quiz.model";
+import { ChapterModel } from "./chapter.model";
 import { UsersModel } from "src/modules/users/models/users.model.";
 import { IDiet, IQuestion, IScenario, IRichContent, IUserAnswers } from "../interfaces/courses.interface";
 import { ICoursesInterest } from "src/modules/users/interfaces/users.interface";
@@ -113,6 +114,17 @@ export class QuestionModel extends Model<QuestionModel>{
 
     @BelongsTo(() => QuestionModel, 'linkedQuestionId')
     linkedQuestion: QuestionModel;
+
+    // The chapter this question belongs to when it's part of a merged
+    // question pair (mirrors linkedQuestionId's role, but points at a
+    // chapter rather than the paired question).
+    @ForeignKey(() => ChapterModel)
+    @AllowNull(true)
+    @Column(DataType.UUID)
+    linkedQuestionChapterId: string;
+
+    @BelongsTo(() => ChapterModel, 'linkedQuestionChapterId')
+    linkedQuestionChapter: ChapterModel;
 
 
     @BeforeCreate
