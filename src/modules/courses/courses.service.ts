@@ -480,13 +480,13 @@ async reviewQuiz(user: IUser, quizId: string) {
 
   const questions = await this.questionRepository.findAll( { id: { [Op.in]: questionIds } });
   
-  const questionWithAnswer = questions.map(question => {
+  const questionWithAnswer = this.attachComputedQuestionRanges(questions.map(question => {
     const userAnswer = userAnswers.find(a => a.questionId === question.id);
     return {
       ...question.toJSON(),
       userAnswer: userAnswer?.answer || null
     };
-  });
+  }));
 
   return {
     score: userAttempt.score,
