@@ -13,9 +13,10 @@ import { EmailModule } from './shared/notification/email/email.module';
 import { CoursesModule } from './modules/courses/courses.module';
 import { ContentModule } from './modules/content/content.module';
 import { PaymentModule } from './modules/payment/payment.module';
+import { MediaModule } from './modules/media/media.module';
 
 @Module({
-  imports: [ConfigsModule, DatabaseModule, EmailModule, JwtModule, CacheStoreModule, AdminModule, UsersModule, AuthModule, CoursesModule, ContentModule, PaymentModule],
+  imports: [ConfigsModule, DatabaseModule, EmailModule, JwtModule, CacheStoreModule, AdminModule, UsersModule, AuthModule, CoursesModule, ContentModule, PaymentModule, MediaModule],
   controllers: [AppController],
   providers: [AppService, ...appProvider],
 })

@@ -14,9 +14,10 @@ import { QuestionRepository } from './repositories/question.repository';
 import { PaymentRepository } from '../payment/repositories/payment.repository';
 import { CourseRatingModel } from './models/course-rating.model';
 import { CourseRatingRepository } from './repositories/course-rating.repository';
+import { MediaModule } from '../media/media.module';
 
 @Module({
-  imports: [SequelizeModule.forFeature([CoursesModel, ChapterModel, QuizModel, QuestionModel, QuizAttemptModel, CourseRatingModel])],
+  imports: [SequelizeModule.forFeature([CoursesModel, ChapterModel, QuizModel, QuestionModel, QuizAttemptModel, CourseRatingModel]), MediaModule],
   controllers: [CoursesController],
   providers: [CoursesService, CoursesRepository, ChapterRepository, QuizAttemptRepository, QuizRepository, QuestionRepository, PaymentRepository, CourseRatingRepository],
   exports: [CoursesService]

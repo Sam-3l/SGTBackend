@@ -9,7 +9,7 @@ import { Op, Sequelize, Transaction, where, literal } from 'sequelize';
 import { QuizModel } from './models/quiz.model';
 import { ChapterModel } from './models/chapter.model';
 import { IUser } from '../users/interfaces/users.interface';
-import { IQuestionType, IQuizType } from './interfaces/courses.interface';
+import { IQuestionType, IQuizType, ISection } from './interfaces/courses.interface';
 import { CoursesModel } from './models/course.model';
 import { QuestionModel } from './models/question.model';
 import { PaymentRepository } from '../payment/repositories/payment.repository';
@@ -17,6 +17,7 @@ import { CourseRatingRepository } from './repositories/course-rating.repository'
 import { CourseRatingModel } from './models/course-rating.model';
 import { IStatus } from '../payment/interface/payment.interface';
 import * as helper from "src/common/utils/helper";
+import { BunnyService } from '../media/bunny.service';
 
 @Injectable()
 export class CoursesService {
@@ -28,7 +29,8 @@ export class CoursesService {
     private readonly quizAttemptRepository:QuizAttemptRepository,
     private readonly paymentRepository: PaymentRepository,
     private readonly courseRatingRepository: CourseRatingRepository,
-    
+    private readonly bunnyService: BunnyService,
+
   ){}
 
   async createCourse(data: CreateCourseDto, transaction: Transaction){
@@ -421,7 +423,14 @@ export class CoursesService {
 
   async deleteCourse(id: string, transaction: Transaction){
 
+    const course = await this.courseRepository.findOne({id});
+
     await this.courseRepository.delete({id}, transaction);
+
+    if (course) {
+      await this.bunnyService.deleteAssetByUrl(course.imageUrl);
+      await this.bunnyService.deleteAssetByUrl(course.explanatoryVideoUrl);
+    }
 
   }
 
@@ -557,8 +566,16 @@ async reviewQuiz(user: IUser, quizId: string) {
   }
 
   async updateCourse(id: string, data: UpdateCourseDto, transaction: Transaction){
-    
-    return await this.courseRepository.update({id}, {...data}, transaction);
+
+    const existing = await this.courseRepository.findOne({id});
+
+    const updated = await this.courseRepository.update({id}, {...data}, transaction);
+
+    if (existing && data.imageUrl !== undefined && data.imageUrl !== existing.imageUrl && existing.imageUrl) {
+      await this.bunnyService.deleteAssetByUrl(existing.imageUrl);
+    }
+
+    return updated;
 
   }
 
@@ -572,11 +589,12 @@ async updateQuestion(quizId: string, id: string, data: UpdateQuestionDto, transa
     }
 
     const updatePayload: any = { ...data };
+    const previousAnswerOptions = existing.answerOptions || [];
 
     if (data.answerOptions) {
-        const existingOptions = existing.answerOptions || [];
+        const existingOptions = previousAnswerOptions;
 
-        const incomingOptions = data.answerOptions;          
+        const incomingOptions = data.answerOptions;
 
         const mergedOptions = incomingOptions.map((incoming, index) => {
 
@@ -587,7 +605,7 @@ async updateQuestion(quizId: string, id: string, data: UpdateQuestionDto, transa
                 ...(existingOption ?? { content: '', isCorrect: false }),
 
                 ...incoming,
-            
+
                 image: incoming.image !== undefined ? incoming.image : existingOption?.image,
             };
         });
@@ -596,6 +614,8 @@ async updateQuestion(quizId: string, id: string, data: UpdateQuestionDto, transa
     }
 
     const updated = await this.questionRepository.update({ quizId, id },  updatePayload, transaction);
+
+    await this.cleanupReplacedQuestionAssets(existing, previousAnswerOptions, updatePayload);
 
     // Keep the linked counterpart (this same question's copy in the other
     // quiz - past <-> quick, including nodes inside a dependency/"split"
@@ -630,6 +650,10 @@ async updateQuestion(quizId: string, id: string, data: UpdateQuestionDto, transa
       if (existing?.linkedQuestionId) {
         await this.questionRepository.delete({ id: existing.linkedQuestionId }, transaction, individualHooks);
       }
+
+      if (existing) {
+        await this.cleanupQuestionAssets(existing);
+      }
   }
 
   async deleteQuiz(courseId:string, id:string, transaction: Transaction){
@@ -637,7 +661,13 @@ async updateQuestion(quizId: string, id: string, data: UpdateQuestionDto, transa
   }
 
   async deleteChapter(courseId:string, id:string, transaction: Transaction){
+     const chapter = await this.chapterRepository.findOne({ courseId, id });
+
      await this.chapterRepository.delete({courseId, id}, transaction);
+
+     if (chapter) {
+       await this.cleanupSections(chapter.sections || []);
+     }
   }
 
   async updateQuiz(courseId:string, id:string, data: updateQuizDto, transaction: Transaction){
@@ -649,9 +679,67 @@ async updateQuestion(quizId: string, id: string, data: UpdateQuestionDto, transa
 
     if(!chapter) throw new BadRequestException("Chapter does not exist");
 
+    const removedSection = chapter.sections.find(section => section.publicId === publicId);
     const sections = chapter.sections.filter(section => section.publicId !== publicId);
 
-    return await this.chapterRepository.update({ courseId, id }, { sections }, transaction);
+    const result = await this.chapterRepository.update({ courseId, id }, { sections }, transaction);
+
+    if (removedSection) {
+      await this.cleanupSections([removedSection]);
+    }
+
+    return result;
+  }
+
+  private isVideoResource(resourceType: string): boolean {
+    return (resourceType || '').toLowerCase() === 'video';
+  }
+
+  private async cleanupSections(sections: ISection[]): Promise<void> {
+    for (const section of sections) {
+      if (!section?.publicId) continue;
+
+      if (this.isVideoResource(section.resourceType)) {
+        await this.bunnyService.deleteStreamVideo(section.publicId);
+      } else {
+        await this.bunnyService.deleteFromStorage(section.publicId);
+      }
+    }
+  }
+
+  private async cleanupQuestionAssets(question: any): Promise<void> {
+    if (question.publicId) await this.bunnyService.deleteFromStorage(question.publicId);
+    if (question.explanatoryVideoUrl) await this.bunnyService.deleteAssetByUrl(question.explanatoryVideoUrl);
+
+    const answerOptions = question.answerOptions || [];
+    for (const option of answerOptions) {
+      if (option?.image) await this.bunnyService.deleteAssetByUrl(option.image);
+    }
+  }
+
+  private async cleanupReplacedQuestionAssets(existing: any, previousAnswerOptions: any[], updatePayload: any): Promise<void> {
+    if (updatePayload.publicId !== undefined && updatePayload.publicId !== existing.publicId && existing.publicId) {
+      await this.bunnyService.deleteFromStorage(existing.publicId);
+    }
+
+    if (
+      updatePayload.explanatoryVideoUrl !== undefined &&
+      updatePayload.explanatoryVideoUrl !== existing.explanatoryVideoUrl &&
+      existing.explanatoryVideoUrl
+    ) {
+      await this.bunnyService.deleteAssetByUrl(existing.explanatoryVideoUrl);
+    }
+
+    if (updatePayload.answerOptions) {
+      for (let index = 0; index < previousAnswerOptions.length; index++) {
+        const previous: any = previousAnswerOptions[index];
+        const next = updatePayload.answerOptions[index];
+
+        if (previous?.image && next?.image !== previous.image) {
+          await this.bunnyService.deleteAssetByUrl(previous.image);
+        }
+      }
+    }
   }
 
   async updateChapter(courseId:string, id:string, data: UpdateChapterDto, transaction: Transaction){

@@ -20,7 +20,13 @@ export default () => ({
     flutterwavePublicKey: process.env.FLUTTERWAVE_PUBLIC_KEY,
     flutterwaveSecretKey: process.env.FLUTTERWAVE_SECRET_KEY,
     flutterwaveEncryptionKey: process.env.FLUTTERWAVE_ENCRYPTION_KEY,
-    flutterwaveBaseUrl: process.env.FLUTTERWAVE_BASE_URL
+    flutterwaveBaseUrl: process.env.FLUTTERWAVE_BASE_URL,
+    bunnyStorageZoneName: process.env.BUNNY_STORAGE_ZONE_NAME,
+    bunnyStorageAccessKey: process.env.BUNNY_STORAGE_ACCESS_KEY,
+    bunnyStorageRegionHost: process.env.BUNNY_STORAGE_REGION_HOST,
+    bunnyPullZoneHostname: process.env.BUNNY_PULL_ZONE_HOSTNAME,
+    bunnyStreamLibraryId: process.env.BUNNY_STREAM_LIBRARY_ID,
+    bunnyStreamApiKey: process.env.BUNNY_STREAM_API_KEY,
 })
 
 

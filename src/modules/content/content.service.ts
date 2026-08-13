@@ -4,12 +4,14 @@ import { UpdateContentDto } from './dto/update-content.dto';
 import { Transaction } from 'sequelize';
 import { ContentRepository } from './repositories/content.repository';
 import * as helpers from 'src/common/utils/helper';
+import { BunnyService } from '../media/bunny.service';
 
 @Injectable()
 export class ContentService {
 
   constructor(
-    private readonly contentRepository: ContentRepository
+    private readonly contentRepository: ContentRepository,
+    private readonly bunnyService: BunnyService
   ){}
 
   async create(data: CreateContentDto, transaction: Transaction) {
@@ -37,7 +39,13 @@ export class ContentService {
 
   async removeContent(id: string, transaction: Transaction){
 
+     const content = await this.contentRepository.findOne({id});
+
      await this.contentRepository.delete({id}, transaction);
+
+     if (content) {
+       await this.bunnyService.deleteAssetByUrl(content.image);
+     }
 
   }
 
