@@ -500,10 +500,14 @@ class UserAnswersDto{
 
 
 export class UpdateCourseDto{
-    
+
     @IsString()
     @IsOptional()
     title: string;
+
+    @IsString()
+    @IsOptional()
+    description: string;
 
     @IsString()
     @IsOptional()
@@ -519,6 +523,10 @@ export class UpdateCourseDto{
     @IsEnum(ICoursesInterest)
     @IsOptional()
     courseType: ICoursesInterest;
+
+    @IsNumber()
+    @IsOptional()
+    durationMonths: number;
 }
 
 export class GetQuizByTypeDto{
