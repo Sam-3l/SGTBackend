@@ -114,14 +114,14 @@ export class CoursesController {
 
   @Get("past-question/:id")
   @ResponseMessage("past question")
-  async getPastQuestion(@Param("id") id: string, @Query() query: GetPastQuestionDto){
-    return await this.coursesService.findPastQuestion(id, query);
+  async getPastQuestion(@Param("id") id: string, @Query() query: GetPastQuestionDto, @User() user: IUser){
+    return await this.coursesService.findPastQuestion(id, query, user);
   }
 
   @Get("question/:id")
   @ResponseMessage("questions")
-  async getQuestions(@Param("id") id: string, @Query() query: GetCourseDto){
-    return await this.coursesService.findQuestion(id, query);
+  async getQuestions(@Param("id") id: string, @Query() query: GetCourseDto, @User() user: IUser){
+    return await this.coursesService.findQuestion(id, query, user);
   }
 
   @Get("chapter/:courseId")
@@ -178,6 +178,13 @@ export class CoursesController {
   @ResponseMessage("quiz updated successfully") 
   async UpdateQuiz(@Param("courseId") courseId: string, @Param("quizId") id: string, @Body() body: updateQuizDto, @TransactionParam() transaction: Transaction){
     return await this.coursesService.updateQuiz(courseId, id, body, transaction);
+  }
+
+  @Role(IRole.SUPER_ADMIN, IRole.MANAGE_COURSES)
+  @Delete("quiz/instruction/:courseId/:quizId")
+  @ResponseMessage("quiz instruction removed successfully")
+  async removeQuizInstruction(@Param("courseId") courseId: string, @Param("quizId") id: string, @TransactionParam() transaction: Transaction){
+    return await this.coursesService.deleteQuizInstruction(courseId, id, transaction);
   }
 
   @Role(IRole.SUPER_ADMIN)

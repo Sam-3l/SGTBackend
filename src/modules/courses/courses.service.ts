@@ -151,7 +151,7 @@ export class CoursesService {
 
   }
 
-  async findPastQuestion(quizId: string, data: GetPastQuestionDto){
+  async findPastQuestion(quizId: string, data: GetPastQuestionDto, user?: IUser){
     const {page, limit, timeLimit, year, diet} = data;
 
     const quiz = await this.quizRepository.findOne({id: quizId});
@@ -164,8 +164,13 @@ export class CoursesService {
 
     quizJson = quiz.toJSON();
 
-    const defaultLimit = quizJson.default;   
-    
+    const defaultLimit = quizJson.default;
+
+    // The "default" question count is a student-facing cap the admin sets
+    // (e.g. show 100 of the 500 questions). It must never apply when the
+    // admin is the one fetching - they need to see/manage everything.
+    const isAdmin = user?.client === 'admin';
+
     if(timeLimit) quizJson["timeLimit"] = timeLimit;
 
     quizJson["year"] =  year;
@@ -178,13 +183,13 @@ export class CoursesService {
        quizJson["timeLimit"] = val;
     }
 
-    if( defaultLimit > 0 && !limit  ){
+    if( defaultLimit > 0 && !limit && !isAdmin ){
       question = await this.questionRepository.findAllPaginated({quizId, year, diet}, null, {page: 1, limit: defaultLimit });
 
      
      } 
 
-    if(defaultLimit === 0 || limit){
+    if(defaultLimit === 0 || limit || isAdmin){
       
       question = await this.questionRepository.findAllPaginated({quizId, year, diet}, null, {page, limit});
         
@@ -203,7 +208,7 @@ export class CoursesService {
 
   }
 
-  async findQuestion(quizId: string, data: GetCourseDto){
+  async findQuestion(quizId: string, data: GetCourseDto, user?: IUser){
 
      const {page, limit, timeLimit} = data;
 
@@ -228,13 +233,18 @@ export class CoursesService {
        quizJson["timeLimit"] = val;
     }
 
+    // The "default" question count is a student-facing cap the admin sets
+    // (e.g. show 100 of the 500 questions). It must never apply when the
+    // admin is the one fetching - they need to see/manage everything.
+    const isAdmin = user?.client === 'admin';
+
     if(quiz["questionType"] === IQuestionType.general_question) return await this.handleGeneralQuestionType(quiz, data, quizJson);
     
-    if( defaultLimit > 0 && !limit  ){
+    if( defaultLimit > 0 && !limit && !isAdmin ){
       question = await this.questionRepository.findAllPaginated({quizId}, null, {page: 1, limit: defaultLimit });
      } 
 
-    if(defaultLimit === 0 || limit){
+    if(defaultLimit === 0 || limit || isAdmin){
       question = await this.questionRepository.findAllPaginated({quizId}, null, {page, limit});
      
       const {total} = question;
@@ -672,6 +682,12 @@ async updateQuestion(quizId: string, id: string, data: UpdateQuestionDto, transa
 
   async updateQuiz(courseId:string, id:string, data: updateQuizDto, transaction: Transaction){
      return await this.quizRepository.update({courseId, id}, {...data}, transaction);
+  }
+
+  async deleteQuizInstruction(courseId:string, id:string, transaction: Transaction){
+     // instruction is NOT NULL at the DB level, so "deleting" it means
+     // clearing it to an empty string rather than setting it to null.
+     return await this.quizRepository.update({courseId, id}, { instruction: '' }, transaction);
   }
 
   async deleteSection(courseId:string, id:string,  publicId: string, transaction: Transaction){
