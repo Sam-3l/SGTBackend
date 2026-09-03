@@ -238,7 +238,7 @@ export class CoursesService {
     // admin is the one fetching - they need to see/manage everything.
     const isAdmin = user?.client === 'admin';
 
-    if(quiz["questionType"] === IQuestionType.general_question) return await this.handleGeneralQuestionType(quiz, data, quizJson);
+    if(quiz["questionType"] === IQuestionType.general_question) return await this.handleGeneralQuestionType(quiz, data, quizJson, true, isAdmin);
     
     if( defaultLimit > 0 && !limit && !isAdmin ){
       question = await this.questionRepository.findAllPaginated({quizId}, null, {page: 1, limit: defaultLimit });
@@ -1003,7 +1003,7 @@ async updateQuestion(quizId: string, id: string, data: UpdateQuestionDto, transa
     return questions;
   }
 
-  async handleGeneralQuestionType(quiz: any, data: GetCourseDto, quizJson: any, throwIfEmpty: boolean = true) {
+  async handleGeneralQuestionType(quiz: any, data: GetCourseDto, quizJson: any, throwIfEmpty: boolean = true, isAdmin: boolean = false) {
     const { page, limit, timeLimit } = data;
     const defaultLimit = quizJson.default;
   
@@ -1087,7 +1087,10 @@ async updateQuestion(quizId: string, id: string, data: UpdateQuestionDto, transa
   
     groups.sort((a, b) => a.minCreatedAt - b.minCreatedAt);
   
-    const finalLimit = limit || defaultLimit;
+    // Same student-facing cap as the two direct-query paths in findQuestion/
+    // findPastQuestion - an admin fetching this quiz must see every question,
+    // not just the "default" count set for students.
+    const finalLimit = isAdmin ? Infinity : (limit || defaultLimit);
     let selectedQuestions: any[] = [];
     for (const group of groups) {
       if (selectedQuestions.length >= finalLimit) break;
