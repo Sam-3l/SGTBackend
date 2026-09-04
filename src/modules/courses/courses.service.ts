@@ -545,14 +545,15 @@ async reviewQuiz(user: IUser, quizId: string) {
 
     if(type){
       quizType = await this.quizRepository.findOne({ ...payload, type });
-
-      if(!quizType) throw new BadRequestException("quiz for this type does not exist");
-      
     } else {
       quizType = await this.quizRepository.findOne({ ...payload });
     }
-     
-    
+
+    // Without this, a course left with zero quizzes for this questionType
+    // (e.g. right after deleting the last one) crashes with an unhandled
+    // "Cannot read properties of null" instead of a clean 400 - this
+    // applied to both branches above, not just the `type`-provided one.
+    if(!quizType) throw new BadRequestException("quiz for this type does not exist");
 
     const quizTypeJson = quizType.toJSON();
 
