@@ -572,7 +572,14 @@ async reviewQuiz(user: IUser, quizId: string) {
 
     }
 
-    return await this.quizRepository.findAll({ courseId, questionType }, <unknown>includeOption);
+    // `type` distinguishes multiple quiz rows that can share the same
+    // (courseId, questionType) - e.g. a multiple_choice past_question quiz
+    // and a true_false past_question quiz. It was already used above to
+    // validate/select the specific quiz being asked for; dropping it here
+    // meant this could return a sibling quiz's row (wrong instruction,
+    // wrong questions) whenever more than one `type` exists under the same
+    // questionType.
+    return await this.quizRepository.findAll({ courseId, questionType, ...(type ? { type } : {}) }, <unknown>includeOption);
   }
 
   async updateCourse(id: string, data: UpdateCourseDto, transaction: Transaction){
